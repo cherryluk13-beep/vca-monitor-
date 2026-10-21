@@ -1,0 +1,65 @@
+name: VCA Restock Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 每 5 分钟一次（GitHub 允许的最短间隔，实际常有延迟）
+  workflow_dispatch:         # 允许在网页上手动点按钮运行
+    inputs:
+      mode:
+        description: "运行模式"
+        type: choice
+        options:
+          - check
+          - test-email
+          - test-bark
+        default: check
+
+concurrency:
+  group: vca-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 下载代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: 运行监控
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          IN_STOCK_TEXT: ${{ vars.IN_STOCK_TEXT }}
+          OUT_OF_STOCK_TEXT: ${{ vars.OUT_OF_STOCK_TEXT }}
+        run: |
+          MODE="${{ github.event.inputs.mode || 'check' }}"
+          if [ "$MODE" = "test-email" ]; then
+            python monitor.py --test-email
+          elif [ "$MODE" = "test-bark" ]; then
+            python monitor.py --test-bark
+          else
+            python monitor.py
+          fi
+
+      - name: 上传截图（仅失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: screenshot.png
+          if-no-files-found: ignore
+          retention-days: 7
