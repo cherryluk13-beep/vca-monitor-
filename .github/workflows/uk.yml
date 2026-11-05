@@ -1,0 +1,35 @@
+name: VCA UK Monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 安裝依賴
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: 運行監控
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          PRODUCT_URL: https://www.vancleefarpels.com/gb/en/collections/jewelry/alhambra/vcard35600---vintage-alhambra-bracelet-5-motifs.html
+        run: python monitor.py
+      - name: 上傳截圖
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: screenshot.png
+          if-no-files-found: ignore
